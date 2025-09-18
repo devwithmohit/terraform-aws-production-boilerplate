@@ -1,0 +1,3 @@
+output "s3" {
+  value = random_id.rand_id.hex
+}
