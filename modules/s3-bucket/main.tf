@@ -7,6 +7,9 @@ locals {
   bucket_name = var.bucket_name != null ? (
     var.append_random_suffix ? "${var.bucket_name}-${random_id.suffix[0].hex}" : var.bucket_name
   ) : null
+
+  # If static website hosting is enabled, disable public access blocks; otherwise follow var.block_public_access
+  block_public = var.enable_website ? false : var.block_public_access
 }
 
 resource "aws_s3_bucket" "this" {
@@ -24,7 +27,7 @@ resource "aws_s3_bucket" "this" {
   )
 }
 
-# Ownership controls - BucketOwnerEnforced disables ACLs (AWS security best practice)
+# Ownership controls - BucketOwnerEnforced disables legacy ACLs
 resource "aws_s3_bucket_ownership_controls" "this" {
   bucket = aws_s3_bucket.this.id
 
@@ -33,17 +36,17 @@ resource "aws_s3_bucket_ownership_controls" "this" {
   }
 }
 
-# Public Access Block
+# Public Access Block - blocks all public access unless configured for static website hosting
 resource "aws_s3_bucket_public_access_block" "this" {
   bucket = aws_s3_bucket.this.id
 
-  block_public_acls       = var.block_public_access
-  block_public_policy     = var.block_public_access
-  ignore_public_acls      = var.block_public_access
-  restrict_public_buckets = var.block_public_access
+  block_public_acls       = local.block_public
+  block_public_policy     = local.block_public
+  ignore_public_acls      = local.block_public
+  restrict_public_buckets = local.block_public
 }
 
-# Server-Side Encryption Configuration
+# Server-Side Encryption Configuration (AES-256 by default, or KMS if key ARN provided)
 resource "aws_s3_bucket_server_side_encryption_configuration" "this" {
   bucket = aws_s3_bucket.this.id
 
@@ -56,7 +59,7 @@ resource "aws_s3_bucket_server_side_encryption_configuration" "this" {
   }
 }
 
-# Versioning
+# Bucket Versioning
 resource "aws_s3_bucket_versioning" "this" {
   bucket = aws_s3_bucket.this.id
 
@@ -65,7 +68,7 @@ resource "aws_s3_bucket_versioning" "this" {
   }
 }
 
-# Lifecycle Configuration
+# Lifecycle Configuration for incomplete uploads and old versions
 resource "aws_s3_bucket_lifecycle_configuration" "this" {
   count  = var.enable_lifecycle_rules ? 1 : 0
   bucket = aws_s3_bucket.this.id
@@ -86,9 +89,9 @@ resource "aws_s3_bucket_lifecycle_configuration" "this" {
   depends_on = [aws_s3_bucket_versioning.this]
 }
 
-# Enforce TLS/HTTPS only via Bucket Policy
+# Enforce TLS/HTTPS only via Bucket Policy (active for non-website buckets)
 resource "aws_s3_bucket_policy" "enforce_tls" {
-  count  = var.enforce_tls ? 1 : 0
+  count  = (!var.enable_website && var.enforce_tls) ? 1 : 0
   bucket = aws_s3_bucket.this.id
 
   policy = jsonencode({
@@ -115,7 +118,28 @@ resource "aws_s3_bucket_policy" "enforce_tls" {
   depends_on = [aws_s3_bucket_public_access_block.this]
 }
 
-# Optional Static Website Hosting
+# Public read policy for static website hosting (active only when enable_website is true)
+resource "aws_s3_bucket_policy" "website_public_read" {
+  count  = var.enable_website ? 1 : 0
+  bucket = aws_s3_bucket.this.id
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Sid       = "PublicReadGetObject"
+        Effect    = "Allow"
+        Principal = "*"
+        Action    = "s3:GetObject"
+        Resource  = "${aws_s3_bucket.this.arn}/*"
+      }
+    ]
+  })
+
+  depends_on = [aws_s3_bucket_public_access_block.this]
+}
+
+# Static Website Hosting Configuration
 resource "aws_s3_bucket_website_configuration" "this" {
   count  = var.enable_website ? 1 : 0
   bucket = aws_s3_bucket.this.id

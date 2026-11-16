@@ -11,15 +11,6 @@ terraform {
       version = "~> 3.5"
     }
   }
-
-  # Uncomment and configure with the outputs from the bootstrap module
-  # backend "s3" {
-  #   bucket         = "YOUR_BOOTSTRAP_STATE_BUCKET_NAME"
-  #   key            = "dev/terraform.tfstate"
-  #   region         = "ap-south-1"
-  #   dynamodb_table = "YOUR_BOOTSTRAP_LOCK_TABLE_NAME"
-  #   encrypt        = true
-  # }
 }
 
 provider "aws" {
@@ -53,7 +44,7 @@ module "vpc" {
   public_subnet_cidrs  = var.public_subnet_cidrs
   private_subnet_cidrs = var.private_subnet_cidrs
   enable_nat_gateway   = var.enable_nat_gateway
-  single_nat_gateway   = true # Cost optimization for Dev environment
+  single_nat_gateway   = true
 
   tags = var.tags
 }
@@ -73,7 +64,7 @@ module "ec2" {
   allowed_ssh_cidrs           = var.allowed_ssh_cidrs
   enable_http                 = true
   allowed_http_cidrs          = ["0.0.0.0/0"]
-  create_iam_instance_profile = true # Enables AWS SSM Session Manager access without open SSH ports
+  create_iam_instance_profile = true
   root_volume_size            = 20
   root_volume_type            = "gp3"
 
@@ -95,7 +86,7 @@ module "s3_bucket" {
   enable_versioning    = true
   block_public_access  = true
   enforce_tls          = true
-  force_destroy        = true # Set to true in dev for clean tear-downs
+  force_destroy        = true
 
   tags = var.tags
 }
