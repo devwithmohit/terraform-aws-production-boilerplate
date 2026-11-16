@@ -1,28 +1,44 @@
-# Terraform Files
-# Ignore the .terraform directory where Terraform stores its plugins and configurations
-.terraform/
+# Local .terraform directories
+**/.terraform/*
 
-# Terraform state files
+# .tfstate files
 *.tfstate
+*.tfstate.*
 *.tfstate.backup
 
-# Ignore override files (created by Terraform CLI)
+# Crash log files
+crash.log
+crash.*.log
+
+# Exclude sensitive tfvars files (use .example files for version control)
+*.tfvars
+*.tfvars.json
 override.tf
 override.tf.json
 *_override.tf
 *_override.tf.json
 
-# Ignore plan files (created when using terraform plan)
+# CLI configuration files
+.terraformrc
+terraform.rc
+
+# Plan files
 *.tfplan
-*.tfplan.backup
+tfplan
 
-# Local environment variables file
+# Environment variables and secrets
 .env
+.env.*
+!.env.example
 
-# IDE configuration files
+# IDE & Editor folders
 .vscode/
 .idea/
-
-# OS-specific files
+*.swp
+*~
 .DS_Store
 Thumbs.db
+
+# OS generated files
+ehthumbs.db
+[Nn]es[Tt]opia.dat
