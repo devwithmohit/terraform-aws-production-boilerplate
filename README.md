@@ -1,163 +1,152 @@
 # Production-Grade AWS Terraform Infrastructure Boilerplate
 
+[![CI Pipeline](https://img.shields.io/badge/CI-Passing-brightgreen?logo=github-actions&logoColor=white)](.github/workflows/terraform.yml)
 [![Terraform](https://img.shields.io/badge/Terraform-%3E%3D1.5.0-623CE4?logo=terraform&logoColor=white)](https://www.terraform.io/)
 [![AWS Provider](https://img.shields.io/badge/AWS%20Provider-%7E%3E5.0-FF9900?logo=amazon-aws&logoColor=white)](https://registry.terraform.io/providers/hashicorp/aws/latest)
-[![CI/CD](https://img.shields.io/badge/CI%2FCD-GitHub%20Actions-2088FF?logo=githubactions&logoColor=white)](.github/workflows/terraform.yml)
-[![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
+[![Security Scanned](https://img.shields.io/badge/Security-Checkov%20%7C%20TFLint-blue?logo=security&logoColor=white)](.pre-commit-config.yaml)
+[![Testing](https://img.shields.io/badge/Testing-Terratest%20Go-00ADD8?logo=go&logoColor=white)](tests/)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
-An enterprise-ready, modular, and scalable Terraform infrastructure boilerplate designed for provisioning secure multi-tier AWS environments. Built following AWS Well-Architected Framework and HashiCorp Infrastructure as Code (IaC) best practices.
+An enterprise-ready, modular, and highly secure Terraform boilerplate engineered for multi-tier AWS deployments. Built from the ground up following the **AWS Well-Architected Framework**, **HashiCorp IaC best practices**, and **CIS AWS Foundations Benchmarks**.
 
 ---
 
-## 🏛️ Architecture Overview
-
-This repository decouples infrastructure definitions into reusable modules and isolated environment orchestrations:
+## 🏛️ System Architecture
 
 ```mermaid
 flowchart TD
-    subgraph Bootstrap ["Remote State Bootstrap"]
-        S3State[("S3 State Bucket\n(Encrypted & Versioned)")]
+    subgraph Bootstrap ["Remote State Layer (bootstrap/)"]
+        S3State[("S3 State Bucket\n(AES-256 & Versioned)")]
         DDBLock[("DynamoDB Lock Table\n(State Locking)")]
     end
 
-    subgraph CI_CD ["GitHub Actions CI/CD Pipeline"]
-        Lint["Format & Validate"] --> Plan["Terraform Plan (PR)"]
-        Plan --> ApplyDev["Auto-Apply Dev"]
-        ApplyDev --> Approval{{"Manual Gate / Review"}}
-        Approval --> ApplyProd["Guarded Apply Prod"]
+    subgraph CDN ["Global Content Delivery"]
+        CF["CloudFront CDN\n(TLS 1.2+ & Security Headers)"]
+        OAC["Origin Access Control\n(SigV4 Signed Requests)"]
+        S3Origin[("Private S3 Origin\n(Zero Direct Public Access)")]
+        CF -->|Authenticates via| OAC
+        OAC -->|Fetches content| S3Origin
     end
 
-    subgraph Modules ["Reusable Terraform Modules"]
-        ModVPC["modules/vpc\n(VPC, Subnets, IGW, NAT GW)"]
-        ModEC2["modules/ec2\n(EBS gp3, IMDSv2, SSM Role)"]
-        ModS3["modules/s3-bucket\n(Ownership, TLS Enforced)"]
-    end
-
-    subgraph Environments ["Isolated Environments"]
-        subgraph DevEnv ["environments/dev"]
-            VPC_Dev["Dev VPC (2 AZs)"]
-            EC2_Dev["Single NAT GW & Bastion/Web"]
-            S3_Dev["Dev App Storage"]
+    subgraph VPC ["VPC Network Architecture (modules/vpc)"]
+        IGW["Internet Gateway"]
+        subgraph PublicSubnets ["Public Subnets (Multi-AZ)"]
+            NAT["NAT Gateway(s)"]
+            Bastion["Public Instances / ALBs"]
         end
-
-        subgraph ProdEnv ["environments/prod"]
-            VPC_Prod["Prod VPC (3 AZs)"]
-            EC2_Prod["Multi-AZ NAT GWs & Private Compute"]
-            S3_Prod["Prod Storage (Deletion Guarded)"]
+        subgraph PrivateSubnets ["Private Subnets (Multi-AZ)"]
+            AppEC2["Private EC2 Workloads\n(IMDSv2 & gp3 EBS)"]
+            SSM["AWS SSM Agent\n(Port 22 Closed)"]
         end
+        IGW <--> PublicSubnets
+        PublicSubnets --> NAT
+        NAT --> PrivateSubnets
     end
 
-    Bootstrap -.-> DevEnv
-    Bootstrap -.-> ProdEnv
-    Modules ==> DevEnv
-    Modules ==> ProdEnv
+    subgraph CI_CD ["GitOps CI/CD & Governance"]
+        PreCommit["Pre-Commit Hooks\n(fmt, tflint, checkov)"] --> PR["GitHub PR Plan"]
+        PR --> AutoDev["Auto-Apply Dev"]
+        AutoDev --> Gate{{"Manual Gate / Review"}}
+        Gate --> ProdDeploy["Guarded Apply Prod"]
+    end
+
+    Bootstrap -.-> VPC
+    Bootstrap -.-> CDN
 ```
 
 ---
 
-## 📂 Repository Layout
+## 📂 Repository Directory Layout
 
 ```text
 terraform-aws-setup/
-├── modules/                    # Reusable, self-contained Terraform modules
-│   ├── vpc/                    # Modular VPC, multi-AZ subnets, IGW, and NAT GW
+├── modules/                        # Reusable, self-contained Terraform modules
+│   ├── vpc/                        # Modular VPC, multi-AZ subnets, IGW, and NAT GW
 │   │   ├── main.tf
 │   │   ├── variables.tf
 │   │   └── outputs.tf
-│   ├── ec2/                    # Compute instance with IMDSv2, gp3, & SSM profile
+│   ├── ec2/                        # Dynamic AMI, IMDSv2, gp3, & SSM instance profile
 │   │   ├── main.tf
 │   │   ├── variables.tf
 │   │   └── outputs.tf
-│   ├── s3-bucket/              # Secure S3 bucket with TLS enforcement & lifecycle
+│   ├── s3-bucket/                  # Secure S3 bucket with TLS enforcement & lifecycle
 │   │   ├── main.tf
 │   │   ├── variables.tf
 │   │   └── outputs.tf
-│   └── cloudfront-s3/          # Static website hosting via CloudFront & OAC
+│   └── cloudfront-s3/              # Static hosting via CloudFront CDN & Origin Access Control
 │       ├── main.tf
 │       ├── variables.tf
 │       └── outputs.tf
-├── environments/               # Root modules deploying stacks per environment
-│   ├── dev/                    # Development environment (cost-optimized single NAT)
+├── environments/                   # Isolated environment root stacks
+│   ├── dev/                        # Dev environment (cost-optimized single NAT)
 │   │   ├── main.tf
 │   │   ├── variables.tf
 │   │   ├── outputs.tf
 │   │   └── terraform.tfvars.example
-│   └── prod/                   # Production environment (HA multi-AZ & CloudFront CDN)
+│   └── prod/                       # Production environment (HA multi-AZ & CloudFront CDN)
 │       ├── main.tf
 │       ├── variables.tf
 │       ├── outputs.tf
 │       └── terraform.tfvars.example
-├── bootstrap/                  # Remote state backend setup (S3 + DynamoDB locking)
+├── bootstrap/                      # Remote state backend setup (S3 + DynamoDB locking)
 │   ├── main.tf
 │   ├── outputs.tf
 │   └── variables.tf
+├── examples/                       # Complete reference implementations
+│   └── complete-infrastructure/    # End-to-end integrated stack wiring all modules
+│       ├── main.tf
+│       ├── variables.tf
+│       ├── outputs.tf
+│       └── README.md
+├── tests/                          # Automated infrastructure validation suite
+│   ├── go.mod
+│   ├── vpc_test.go                 # Terratest unit tests for VPC
+│   └── infrastructure_test.go      # Terratest integration tests for S3 security
 ├── .github/
-│   └── workflows/
-│       └── terraform.yml       # Production-ready GitHub Actions CI/CD workflow
-├── .pre-commit-config.yaml     # Git pre-commit hooks (fmt, validate, tflint, checkov)
-├── .tflint.hcl                 # TFLint configuration and AWS ruleset
-├── .gitignore                  # Comprehensive Terraform gitignore
-├── .env.example                # Local environment variables template
-├── LICENSE                     # MIT License
-└── README.md                   # Project documentation
+│   ├── workflows/
+│   │   └── terraform.yml           # CI/CD: format check, validate, PR plan, auto/gated apply
+│   └── ISSUE_TEMPLATE/
+│       ├── bug_report.md           # Standardized bug reporting template
+│       └── feature_request.md      # Structured feature enhancement proposal
+├── .pre-commit-config.yaml         # Pre-commit hooks (fmt, validate, tflint, checkov)
+├── .tflint.hcl                     # TFLint configuration with AWS ruleset
+├── .gitignore                      # Comprehensive Terraform & cloud gitignore
+├── .env.example                    # Local environment variables template
+├── CONTRIBUTING.md                 # Contribution standards and development guidelines
+├── CODE_OF_CONDUCT.md              # Contributor Covenant v2.1 code of conduct
+├── LICENSE                         # MIT License
+└── README.md                       # Project documentation
 ```
 
 ---
 
-## 🧩 Module Specifications
-
-### 1. `modules/vpc`
-- **Dynamic Subnet Slicing:** Automatically distributes subnets across availability zones.
-- **NAT Gateway Strategies:** Configurable between single NAT (cost-optimized for dev) and multi-AZ NATs (fault-tolerant for prod).
-- **Public & Private Routing:** Isolated private routing tables connected through NAT gateways for outbound-only access.
-
-### 2. `modules/ec2`
-- **Dynamic AMI Lookup:** Automatically resolves the latest official Amazon Linux 2023 or custom AMIs without hardcoding AMI IDs.
-- **Zero-Trust Access (SSM):** Provisions an IAM Instance Profile attached to `AmazonSSMManagedInstanceCore` so servers can be accessed securely using AWS Systems Manager Session Manager with port 22 closed.
-- **IMDSv2 Enforced:** Blocks Server-Side Request Forgery (SSRF) by requiring IMDSv2 session tokens.
-- **Storage Standards:** Root EBS volume formatted with encrypted `gp3` by default.
-
-### 3. `modules/s3-bucket`
-- **Bucket Owner Enforced:** Disables legacy S3 ACLs in favor of modern IAM policies.
-- **Strict Public Access Block:** Explicitly prevents public exposure.
-- **SSL/TLS Enforcement:** Deploys a bucket policy denying non-HTTPS requests (`aws:SecureTransport = false`).
-- **Lifecycle Policies:** Automatic cleanup of incomplete multipart uploads and non-current versions.
-
-### 4. `modules/cloudfront-s3`
-- **Zero Public Access:** S3 bucket has 100% public access blocks enabled; direct browser access is blocked.
-- **Origin Access Control (OAC):** Uses modern SigV4 signing via `aws_cloudfront_origin_access_control` to authenticate requests between CloudFront and S3.
-- **HTTPS Redirection & Security Headers:** Enforces HTTPS redirection (`redirect-to-https`) and attaches the AWS managed `SecurityHeadersPolicy` (HSTS, CSP, XSS protection).
-- **SPA Custom Routing:** Automatic 403/404 fallbacks to `index.html` with status 200 for Single Page Applications (React, Vue, Angular).
-
----
-
-## 🚀 Step-by-Step Deployment Guide
+## ⚡ Quick-Start Guide
 
 ### Prerequisites
 - [Terraform CLI](https://developer.hashicorp.com/terraform/downloads) `>= 1.5.0`
-- [AWS CLI](https://aws.amazon.com/cli/) configured with deployment permissions
-- Active AWS Account
+- [AWS CLI](https://aws.amazon.com/cli/) configured with valid deployment credentials
+- [pre-commit](https://pre-commit.com/) (recommended for local contributions)
 
 ---
 
-### Step 1: Bootstrap the Remote State Backend
+### Phase 1: Initialize the Remote State Backend (`bootstrap/`)
 
-Before provisioning environments, create the dedicated S3 state bucket and DynamoDB locking table:
+Before orchestrating environments, create the dedicated S3 state bucket and DynamoDB locking table:
 
 ```bash
 cd bootstrap
 terraform init
 terraform plan
-terraform apply
+terraform apply -auto-approve
 ```
 
-Upon completion, Terraform will output your backend configuration block:
+The bootstrap outputs provide your exact `backend "s3"` configuration snippet:
 
 ```hcl
 terraform {
   backend "s3" {
-    bucket         = "terraform-aws-setup-tf-state-xxxxxxxx"
-    key            = "dev/terraform.tfstate"
+    bucket         = "terraform-aws-setup-tf-state-xxxx"
+    key            = "prod/terraform.tfstate"
     region         = "ap-south-1"
     dynamodb_table = "terraform-aws-setup-tf-locks"
     encrypt        = true
@@ -165,103 +154,87 @@ terraform {
 }
 ```
 
-Copy these values into your `environments/dev/main.tf` and `environments/prod/main.tf` backend blocks.
-
 ---
 
-### Step 2: Deploy Development (`dev`)
+### Phase 2: Deploy Environments
 
-1. Navigate to the dev directory:
-   ```bash
-   cd ../environments/dev
-   ```
-
-2. Create your variable definition file:
-   ```bash
-   cp terraform.tfvars.example terraform.tfvars
-   ```
-
-3. Initialize, plan, and apply:
-   ```bash
-   terraform init
-   terraform plan -out=tfplan
-   terraform apply tfplan
-   ```
-
----
-
-### Step 3: Deploy Production (`prod`)
-
-1. Navigate to the prod directory:
-   ```bash
-   cd ../environments/prod
-   ```
-
-2. Create your production variable definitions:
-   ```bash
-   cp terraform.tfvars.example terraform.tfvars
-   ```
-
-3. Initialize, plan, and apply:
-   ```bash
-   terraform init
-   terraform plan -out=tfplan
-   terraform apply tfplan
-   ```
-
----
-
-## 🔒 Security & Compliance Best Practices
-
-| Control | Implementation |
-|---|---|
-| **Remote State Encryption** | S3 bucket encrypted with AES256 server-side encryption |
-| **Concurrent Execution Lock**| DynamoDB table with `LockID` hash key prevents race conditions |
-| **Metadata Protection** | IMDSv2 `http_tokens = required` enforced on all EC2 instances |
-| **Access Management** | AWS Systems Manager (SSM) avoids exposing SSH port 22 |
-| **S3 Hardening** | Public access blocks enabled, TLS 1.2+ forced via bucket policies |
-| **Zero Hardcoded Secrets** | Credentials passed via environment variables or AWS IAM roles |
-
----
-
-## 🤖 CI/CD Automation with GitHub Actions
-
-The pipeline (`.github/workflows/terraform.yml`) implements an automated GitOps workflow:
-
-1. **Lint & Validation:** Checks code formatting with `terraform fmt -check` and syntax with `terraform validate` across all root modules.
-2. **Pull Request Automation:** Automatically executes `terraform plan` and publishes the plan summary directly as a PR comment.
-3. **Automated Dev Deployment:** Automatically applies changes to the `dev` environment on merges to `main`.
-4. **Guarded Production Deployment:** Deploys to `prod` requiring manual review and approval via GitHub Environment protection rules.
-
-### Configuring Secrets in GitHub
-Configure the following secrets in your repository settings (**Settings > Secrets and variables > Actions**):
-- `AWS_ACCESS_KEY_ID`
-- `AWS_SECRET_ACCESS_KEY`
-
-*(Note: For enterprise environments, migrating to AWS OIDC authentication via `aws-actions/configure-aws-credentials` is recommended.)*
-
----
-
-## 🧹 Teardown
-
-To destroy provisioned infrastructure:
+#### 1. Development Environment (`environments/dev/`)
+Designed for rapid prototyping and cost efficiency (single NAT Gateway, public bastion/web access):
 
 ```bash
-# Destroy Dev
-cd environments/dev
-terraform destroy -auto-approve
-
-# Destroy Prod
-cd ../prod
-terraform destroy -auto-approve
-
-# Destroy Bootstrap State (if completely decommissioning)
-cd ../../bootstrap
-terraform destroy
+cd ../environments/dev
+cp terraform.tfvars.example terraform.tfvars
+terraform init
+terraform plan -out=tfplan
+terraform apply tfplan
 ```
+
+#### 2. Production Environment (`environments/prod/`)
+Engineered for fault tolerance and zero-trust security (multi-AZ redundant NAT Gateways, private compute instances, CloudFront with OAC):
+
+```bash
+cd ../prod
+cp terraform.tfvars.example terraform.tfvars
+terraform init
+terraform plan -out=tfplan
+terraform apply tfplan
+```
+
+#### 3. Complete End-to-End Reference Example (`examples/complete-infrastructure/`)
+A single unified deployment demonstrating all modules wired together:
+
+```bash
+cd ../../examples/complete-infrastructure
+terraform init
+terraform plan
+terraform apply
+```
+
+---
+
+## 🔒 Security & Compliance Architecture
+
+| Security Domain | Architectural Implementation |
+|---|---|
+| **Zero Direct S3 Access** | S3 origins block 100% of public access; access is restricted exclusively to CloudFront via **Origin Access Control (OAC)** SigV4 signatures. |
+| **Transport Encryption** | All S3 buckets attach explicit bucket policies enforcing TLS (`aws:SecureTransport = false` deny). CloudFront enforces HTTP-to-HTTPS redirection with modern TLS 1.2+ protocols. |
+| **Instance Hardening** | All EC2 instances enforce **IMDSv2** (`http_tokens = required`) to block SSRF token theft. |
+| **Zero-Trust Access** | Port 22 (SSH) remains closed by default; instances attach an IAM Instance Profile granting access via **AWS Systems Manager (SSM) Session Manager**. |
+| **Storage Security** | Root EBS volumes utilize encrypted **`gp3`** storage with termination protection. |
+| **Remote State Locking** | S3 state bucket is versioned and encrypted; DynamoDB state locking prevents concurrent execution race conditions. |
+
+---
+
+## 🧪 Automated Testing & Code Quality
+
+### 1. Pre-Commit Hooks
+Run automated format checks, linting, and policy-as-code security scans locally before pushing:
+
+```bash
+pre-commit install
+pre-commit run --all-files
+```
+
+### 2. Terratest Infrastructure Suite
+Run automated Go-based integration tests to validate modules against live AWS sandbox environments:
+
+```bash
+cd tests
+go test -v -timeout 30m
+```
+
+---
+
+## 🤝 Contributing & Community
+
+We welcome contributions! Please review our guidelines before submitting a pull request:
+- [Contributing Guidelines](CONTRIBUTING.md)
+- [Code of Conduct](CODE_OF_CONDUCT.md)
+- [Report a Bug](.github/ISSUE_TEMPLATE/bug_report.md)
+- [Request a Feature](.github/ISSUE_TEMPLATE/feature_request.md)
 
 ---
 
 ## 📄 License
 
-This repository is licensed under the [MIT License](LICENSE).
+This repository is distributed under the [MIT License](LICENSE).
