@@ -1,0 +1,36 @@
+repos:
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v4.6.0
+    hooks:
+      - id: trailing-whitespace
+      - id: end-of-file-fixer
+      - id: check-yaml
+      - id: check-added-large-files
+        args: ["--maxkb=1024"]
+
+  - repo: https://github.com/antonbabenko/pre-commit-terraform
+    rev: v1.92.0
+    hooks:
+      - id: terraform_fmt
+        name: "Terraform Format"
+        description: "Rewrites all Terraform configuration files to their canonical format."
+
+      - id: terraform_validate
+        name: "Terraform Validate"
+        description: "Validates all Terraform configuration files syntactically and semantically."
+        args:
+          - --hook-config=--retry-once-with-cleanup=true
+
+      - id: terraform_tflint
+        name: "Terraform Lint (tflint)"
+        description: "Finds possible errors, best practice violations, and deprecated syntax."
+        args:
+          - --args=--config=.tflint.hcl
+
+      - id: terraform_checkov
+        name: "Infrastructure Security Scan (checkov)"
+        description: "Scans cloud infrastructure configurations for security compliance and misconfigurations."
+        args:
+          - --args=--framework terraform
+          - --args=--compact
+          - --args=--soft-fail

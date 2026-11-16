@@ -5,21 +5,25 @@ aws_region = "ap-south-1"
 project_name = "demo-app"
 environment  = "prod"
 
-# High-Availability Network configuration (3 AZs)
+# High-Availability Multi-AZ Network Configuration (3 AZs)
 vpc_cidr             = "10.20.0.0/16"
 public_subnet_cidrs  = ["10.20.1.0/24", "10.20.2.0/24", "10.20.3.0/24"]
 private_subnet_cidrs = ["10.20.10.0/24", "10.20.20.0/24", "10.20.30.0/24"]
 enable_nat_gateway   = true
 
-# Compute configuration
+# Compute Configuration (Production Sizing & Hardening)
 instance_type         = "t3.medium"
 root_volume_size      = 50
 allowed_ingress_cidrs = ["10.20.0.0/16"]
 
-# Tags
+# CloudFront CDN Configuration
+cloudfront_price_class = "PriceClass_100"
+
+# Production Resource Tags
 tags = {
   Environment = "prod"
   Owner       = "devops-core"
   CostCenter  = "infrastructure-production"
   Criticality = "Tier-1"
+  DataTier    = "Confidential"
 }

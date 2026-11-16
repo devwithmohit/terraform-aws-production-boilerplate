@@ -68,7 +68,11 @@ terraform-aws-setup/
 │   │   ├── main.tf
 │   │   ├── variables.tf
 │   │   └── outputs.tf
-│   └── s3-bucket/              # Secure S3 bucket with TLS enforcement & lifecycle
+│   ├── s3-bucket/              # Secure S3 bucket with TLS enforcement & lifecycle
+│   │   ├── main.tf
+│   │   ├── variables.tf
+│   │   └── outputs.tf
+│   └── cloudfront-s3/          # Static website hosting via CloudFront & OAC
 │       ├── main.tf
 │       ├── variables.tf
 │       └── outputs.tf
@@ -78,7 +82,7 @@ terraform-aws-setup/
 │   │   ├── variables.tf
 │   │   ├── outputs.tf
 │   │   └── terraform.tfvars.example
-│   └── prod/                   # Production environment (high-availability multi-AZ)
+│   └── prod/                   # Production environment (HA multi-AZ & CloudFront CDN)
 │       ├── main.tf
 │       ├── variables.tf
 │       ├── outputs.tf
@@ -90,6 +94,8 @@ terraform-aws-setup/
 ├── .github/
 │   └── workflows/
 │       └── terraform.yml       # Production-ready GitHub Actions CI/CD workflow
+├── .pre-commit-config.yaml     # Git pre-commit hooks (fmt, validate, tflint, checkov)
+├── .tflint.hcl                 # TFLint configuration and AWS ruleset
 ├── .gitignore                  # Comprehensive Terraform gitignore
 ├── .env.example                # Local environment variables template
 ├── LICENSE                     # MIT License
@@ -116,6 +122,12 @@ terraform-aws-setup/
 - **Strict Public Access Block:** Explicitly prevents public exposure.
 - **SSL/TLS Enforcement:** Deploys a bucket policy denying non-HTTPS requests (`aws:SecureTransport = false`).
 - **Lifecycle Policies:** Automatic cleanup of incomplete multipart uploads and non-current versions.
+
+### 4. `modules/cloudfront-s3`
+- **Zero Public Access:** S3 bucket has 100% public access blocks enabled; direct browser access is blocked.
+- **Origin Access Control (OAC):** Uses modern SigV4 signing via `aws_cloudfront_origin_access_control` to authenticate requests between CloudFront and S3.
+- **HTTPS Redirection & Security Headers:** Enforces HTTPS redirection (`redirect-to-https`) and attaches the AWS managed `SecurityHeadersPolicy` (HSTS, CSP, XSS protection).
+- **SPA Custom Routing:** Automatic 403/404 fallbacks to `index.html` with status 200 for Single Page Applications (React, Vue, Angular).
 
 ---
 

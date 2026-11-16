@@ -12,14 +12,14 @@ terraform {
     }
   }
 
-  # Uncomment and configure with the outputs from the bootstrap module
-  # backend "s3" {
-  #   bucket         = "YOUR_BOOTSTRAP_STATE_BUCKET_NAME"
-  #   key            = "prod/terraform.tfstate"
-  #   region         = "ap-south-1"
-  #   dynamodb_table = "YOUR_BOOTSTRAP_LOCK_TABLE_NAME"
-  #   encrypt        = true
-  # }
+  # Production Remote State with AES-256 S3 Encryption and DynamoDB State Locking
+  backend "s3" {
+    bucket         = "terraform-aws-setup-tf-state-prod"
+    key            = "prod/terraform.tfstate"
+    region         = "ap-south-1"
+    dynamodb_table = "terraform-aws-setup-tf-locks"
+    encrypt        = true
+  }
 }
 
 provider "aws" {
@@ -32,17 +32,19 @@ provider "aws" {
         Environment = var.environment
         Project     = var.project_name
         ManagedBy   = "Terraform"
+        Compliance  = "PCI-DSS-Ready"
+        DataTier    = "Confidential"
       }
     )
   }
 }
 
-# Dynamic Availability Zone Discovery (Filters out unsupported AZs automatically)
+# Dynamic Availability Zone Discovery (Filters active, healthy AZs)
 data "aws_availability_zones" "available" {
   state = "available"
 }
 
-# High-Availability Multi-AZ VPC Module Call
+# 1. High-Availability Multi-AZ VPC Module Call
 module "vpc" {
   source = "../../modules/vpc"
 
@@ -53,12 +55,12 @@ module "vpc" {
   public_subnet_cidrs  = var.public_subnet_cidrs
   private_subnet_cidrs = var.private_subnet_cidrs
   enable_nat_gateway   = var.enable_nat_gateway
-  single_nat_gateway   = false # Multi-AZ Redundant NAT Gateways for Production HA
+  single_nat_gateway   = false # Dedicated NAT Gateway per AZ for production fault-tolerance
 
   tags = var.tags
 }
 
-# Hardened Production EC2 Instance (Placed in Private Subnet)
+# 2. Hardened Production EC2 Instance (Private Subnet Placement & IMDSv2 Enforced)
 module "ec2" {
   source = "../../modules/ec2"
 
@@ -69,7 +71,7 @@ module "ec2" {
   instance_type               = var.instance_type
   associate_public_ip_address = false # Strict Zero-Trust: No public IP in production
   create_security_group       = true
-  enable_ssh                  = false # Port 22 closed; access strictly managed via SSM
+  enable_ssh                  = false # Port 22 closed; access strictly managed via AWS SSM
   allowed_ssh_cidrs           = []
   enable_http                 = false
   enable_https                = true
@@ -80,23 +82,25 @@ module "ec2" {
 
   user_data = <<-EOF
               #!/bin/bash
-              echo "Production workload initialized." > /var/log/provisioning.log
+              echo "Production workload initialized at $(date)" > /var/log/bootstrap.log
               EOF
 
   tags = var.tags
 }
 
-# Production Storage with Versioning, Strict Access Block, and Prevent Deletion
-module "s3_bucket" {
-  source = "../../modules/s3-bucket"
+# 3. Secure CloudFront + S3 Static Hosting with Origin Access Control (OAC)
+module "cloudfront_s3" {
+  source = "../../modules/cloudfront-s3"
 
-  bucket_prefix        = "${var.project_name}-${var.environment}"
-  append_random_suffix = true
+  name_prefix          = "${var.project_name}-${var.environment}"
   environment          = var.environment
+  append_random_suffix = true
+  force_destroy        = false # Production safety: prevents accidental data destruction
   enable_versioning    = true
-  block_public_access  = true
-  enforce_tls          = true
-  force_destroy        = false # Production safety: prevent accidental deletion of state or assets
+  default_root_object  = "index.html"
+  error_document       = "index.html"
+  spa_routing          = true
+  price_class          = var.cloudfront_price_class
 
   tags = var.tags
 }

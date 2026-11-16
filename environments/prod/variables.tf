@@ -53,17 +53,24 @@ variable "root_volume_size" {
 }
 
 variable "allowed_ingress_cidrs" {
-  description = "CIDR blocks allowed HTTPS access to instance."
+  description = "CIDR blocks allowed HTTPS access to the private instance."
   type        = list(string)
-  default     = ["10.20.0.0/16"] # Restricted to internal VPC or ALB CIDRs
+  default     = ["10.20.0.0/16"]
+}
+
+variable "cloudfront_price_class" {
+  description = "Price class for production CloudFront distribution."
+  type        = string
+  default     = "PriceClass_100"
 }
 
 variable "tags" {
-  description = "Resource tags."
+  description = "Resource tags applied to production resources."
   type        = map(string)
   default = {
-    Owner      = "DevOps-Core"
-    Terraform  = "true"
-    Compliance = "PCI-DSS-Ready"
+    Owner       = "DevOps-Core"
+    Terraform   = "true"
+    Criticality = "Tier-1"
+    CostCenter  = "infrastructure-production"
   }
 }
