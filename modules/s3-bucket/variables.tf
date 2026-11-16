@@ -2,12 +2,22 @@ variable "bucket_name" {
   description = "Exact name of the S3 bucket. If null, bucket_prefix will be used."
   type        = string
   default     = null
+
+  validation {
+    condition     = var.bucket_name == null || can(regex("^[a-z0-9][a-z0-9.-]{1,61}[a-z0-9]$", var.bucket_name))
+    error_message = "bucket_name must be between 3 and 63 characters long, begin and end with an alphanumeric character, and contain only lowercase letters, numbers, dots, and hyphens."
+  }
 }
 
 variable "bucket_prefix" {
   description = "Prefix for the bucket name. Required if bucket_name is null."
   type        = string
   default     = null
+
+  validation {
+    condition     = var.bucket_prefix == null || (length(var.bucket_prefix) <= 37 && can(regex("^[a-z0-9][a-z0-9-]*$", var.bucket_prefix)))
+    error_message = "bucket_prefix must be 37 characters or fewer and contain only lowercase letters, numbers, and hyphens."
+  }
 }
 
 variable "append_random_suffix" {
@@ -19,6 +29,11 @@ variable "append_random_suffix" {
 variable "environment" {
   description = "Deployment environment name (e.g., dev, staging, prod)."
   type        = string
+
+  validation {
+    condition     = contains(["dev", "stage", "staging", "prod", "production", "testing", "example"], var.environment)
+    error_message = "environment must be one of: dev, stage, staging, prod, production, testing, example."
+  }
 }
 
 variable "force_destroy" {
@@ -43,6 +58,11 @@ variable "kms_key_arn" {
   description = "ARN of KMS customer-managed key for SSE-KMS. If null, AES256 (SSE-S3) is used."
   type        = string
   default     = null
+
+  validation {
+    condition     = var.kms_key_arn == null || can(regex("^arn:aws:kms:[a-z0-9-]+:[0-9]{12}:key/[a-z0-9-]+$", var.kms_key_arn))
+    error_message = "kms_key_arn must be a valid AWS KMS key ARN."
+  }
 }
 
 variable "enable_lifecycle_rules" {
@@ -55,6 +75,11 @@ variable "noncurrent_version_expiration_days" {
   description = "Number of days after which noncurrent versions expire."
   type        = number
   default     = 90
+
+  validation {
+    condition     = var.noncurrent_version_expiration_days >= 1
+    error_message = "noncurrent_version_expiration_days must be at least 1 day."
+  }
 }
 
 variable "enforce_tls" {

@@ -109,11 +109,14 @@ terraform-aws-setup/
 │       ├── bug_report.md           # Standardized bug reporting template
 │       └── feature_request.md      # Structured feature enhancement proposal
 ├── .pre-commit-config.yaml         # Pre-commit hooks (fmt, validate, tflint, checkov)
+├── .terraform-docs.yml             # Automated documentation generation configuration
 ├── .tflint.hcl                     # TFLint configuration with AWS ruleset
 ├── .gitignore                      # Comprehensive Terraform & cloud gitignore
 ├── .env.example                    # Local environment variables template
+├── Makefile                        # Developer productivity tooling (fmt, validate, clean)
 ├── CONTRIBUTING.md                 # Contribution standards and development guidelines
 ├── CODE_OF_CONDUCT.md              # Contributor Covenant v2.1 code of conduct
+├── SECURITY.md                     # Security policy, baseline, and vulnerability reporting
 ├── LICENSE                         # MIT License
 └── README.md                       # Project documentation
 ```
@@ -223,6 +226,19 @@ cd tests
 go test -v -timeout 30m
 ```
 
+### 3. Developer Helper Makefile
+Daily workflows are encapsulated in the root `Makefile`:
+
+```bash
+make help          # View all available make targets
+make fmt           # Recursively format all Terraform code
+make validate      # Initialize and validate all root stacks
+make lint          # Run tflint across all modules
+make security-scan # Run Checkov policy-as-code security scans
+make docs          # Automatically generate markdown documentation
+make clean         # Purge .terraform directories, lockfiles, and plan caches
+```
+
 ---
 
 ## 🤝 Contributing & Community
@@ -230,6 +246,7 @@ go test -v -timeout 30m
 We welcome contributions! Please review our guidelines before submitting a pull request:
 - [Contributing Guidelines](CONTRIBUTING.md)
 - [Code of Conduct](CODE_OF_CONDUCT.md)
+- [Security Policy](SECURITY.md)
 - [Report a Bug](.github/ISSUE_TEMPLATE/bug_report.md)
 - [Request a Feature](.github/ISSUE_TEMPLATE/feature_request.md)
 

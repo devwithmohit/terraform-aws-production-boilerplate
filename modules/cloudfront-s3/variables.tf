@@ -1,17 +1,32 @@
 variable "name_prefix" {
   description = "Prefix applied to all resources created by this module."
   type        = string
+
+  validation {
+    condition     = length(var.name_prefix) > 0 && length(var.name_prefix) <= 32
+    error_message = "name_prefix must be between 1 and 32 characters."
+  }
 }
 
 variable "environment" {
   description = "Deployment environment name (e.g., dev, staging, prod)."
   type        = string
+
+  validation {
+    condition     = contains(["dev", "stage", "staging", "prod", "production", "testing", "example"], var.environment)
+    error_message = "environment must be one of: dev, stage, staging, prod, production, testing, example."
+  }
 }
 
 variable "bucket_name" {
   description = "Explicit name for the S3 origin bucket. If null, a name will be derived from name_prefix."
   type        = string
   default     = null
+
+  validation {
+    condition     = var.bucket_name == null || can(regex("^[a-z0-9][a-z0-9.-]{1,61}[a-z0-9]$", var.bucket_name))
+    error_message = "bucket_name must follow standard AWS S3 bucket naming conventions."
+  }
 }
 
 variable "append_random_suffix" {
@@ -54,6 +69,11 @@ variable "price_class" {
   description = "CloudFront distribution price class (e.g., PriceClass_100, PriceClass_200, PriceClass_All)."
   type        = string
   default     = "PriceClass_100"
+
+  validation {
+    condition     = contains(["PriceClass_100", "PriceClass_200", "PriceClass_All"], var.price_class)
+    error_message = "price_class must be one of: PriceClass_100, PriceClass_200, PriceClass_All."
+  }
 }
 
 variable "custom_domain_names" {
@@ -66,12 +86,22 @@ variable "acm_certificate_arn" {
   description = "ARN of the AWS ACM SSL certificate in us-east-1 (required when using custom_domain_names)."
   type        = string
   default     = null
+
+  validation {
+    condition     = var.acm_certificate_arn == null || can(regex("^arn:aws:acm:us-east-1:[0-9]{12}:certificate/[a-z0-9-]+$", var.acm_certificate_arn))
+    error_message = "acm_certificate_arn must be a valid ACM certificate in us-east-1 (required for CloudFront distributions)."
+  }
 }
 
 variable "geo_restriction_type" {
   description = "Method for geo-restriction: none, whitelist, or blacklist."
   type        = string
   default     = "none"
+
+  validation {
+    condition     = contains(["none", "whitelist", "blacklist"], var.geo_restriction_type)
+    error_message = "geo_restriction_type must be one of: none, whitelist, blacklist."
+  }
 }
 
 variable "geo_restriction_locations" {
